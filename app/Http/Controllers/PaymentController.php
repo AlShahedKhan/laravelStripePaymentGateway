@@ -111,8 +111,8 @@ class PaymentController extends Controller
                     'user_email' => $user->email,
                 ],
                 'automatic_payment_methods' => [
-                    'enabled' => true,
-                    'allow_redirects' => 'never', // Prevent redirect-based methods
+                    'enabled' => true, // Enable automatic payment methods
+                    'allow_redirects' => 'never', // Disable redirect-based methods
                 ],
                 'confirm' => true, // Automatically confirm the payment
             ]);
@@ -141,4 +141,78 @@ class PaymentController extends Controller
 
 
 
+    public function refundPayment(Request $request)
+    {
+        try {
+            // Validate the request
+            $request->validate([
+                'payment_intent_id' => 'required|string', // PaymentIntent ID
+                'amount' => 'nullable|numeric|min:1', // Optional: Amount in cents
+            ]);
+
+            \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
+
+            // Create a refund
+            $refund = \Stripe\Refund::create([
+                'payment_intent' => $request->payment_intent_id,
+                'amount' => $request->amount * 100 ?? null, // Refund full amount if 'amount' is not provided
+            ]);
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Refund processed successfully.',
+                'refund' => $refund,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Refund processing failed.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function getCustomerTransactionTotal(Request $request)
+    {
+        try {
+            $user = $request->user(); // Get the authenticated user
+
+            if (!$user->stripe_customer_id) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'No Stripe customer ID found for this user.',
+                ], 404);
+            }
+
+            \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
+
+            // Fetch all charges for the customer
+            $charges = \Stripe\Charge::all([
+                'customer' => $user->stripe_customer_id,
+                'limit' => 100, // Adjust limit as needed
+            ]);
+
+            // Sum the total amount from the charges
+            $totalAmount = array_reduce($charges->data, function ($sum, $charge) {
+                return $sum + $charge->amount; // Amount is in cents
+            }, 0);
+
+            $totalAmountInDollars = $totalAmount / 100; // Convert to dollars
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Customer transaction total retrieved successfully.',
+                'data' => [
+                    'stripe_customer_id' => $user->stripe_customer_id,
+                    'total_amount' => $totalAmountInDollars,
+                ],
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to retrieve customer transactions.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
 }

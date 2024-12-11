@@ -23,4 +23,6 @@ Route::post('/login',[UserController::class, 'login']);
 Route::middleware('auth:api')->group(function () {
     Route::post('/logout', [UserController::class, 'logout']);
     Route::post('/process-payment', [PaymentController::class, 'processPayment']);
+    Route::post('/refund-payment', [PaymentController::class, 'refundPayment']);
+    Route::post('/customer-transaction-total', [PaymentController::class, 'getCustomerTransactionTotal']);
 });
